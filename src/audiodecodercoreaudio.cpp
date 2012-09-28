@@ -222,7 +222,7 @@ int AudioDecoderCoreAudio::seek(int sampleIdx) {
 
     m_iPositionInSamples = sampleIdx;
 
-    return filepos;
+    return AUDIODECODER_OK;
 }
 
 int AudioDecoderCoreAudio::read(int size, const SAMPLE *destination) {

@@ -122,7 +122,8 @@ if platform_is_windows:
     else:
         env.Append(CXXFLAGS  = '/MD')
 
-project_lib = env.SharedLibrary(target=project_name, source=objs)
+#project_lib = env.SharedLibrary(target=project_name, source=objs)
+project_lib = env.StaticLibrary(target=project_name, source=objs)
 
 install_lib_target =     env.Install(dir=install_lib_dir, source=[project_lib])
 install_headers_target = env.Install(dir=install_headers_dir, source=[public_headers]) 
