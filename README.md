@@ -122,6 +122,10 @@ or for release configuration:
 
     scons debug=0
    
+To build for iOS on Mac OS X, add ios=1 to the command line: (note, the SConscript in src/ targets the iOS 6.0 SDK; you will need to edit the isysroot directive for different SDK versions)
+
+    scons debug=0 ios=1
+
 To install system-wide on Mac OS X (recommended), run:
 
     scons debug=0 install

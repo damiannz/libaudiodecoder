@@ -7,20 +7,23 @@ project_name = "audiodecoder"
 platform_is_macosx = False
 platform_is_windows = False
 platform_is_linux = False
+platform_is_ios = False
 
 #TODO: Make this a compile flag
 debug = False
 if int(ARGUMENTS.get('debug', 0)):
     debug = True 
 
-if sys.platform == 'darwin':
+if int(ARGUMENTS.get('ios', 0)):
+	platform_is_ios = True
+elif sys.platform == 'darwin':
     platform_is_macosx = True
 elif sys.platform == 'win32':
     platform_is_windows = True
 elif sys.platform == 'linux2':
     platform_is_linux = True
 
-if platform_is_macosx or platform_is_linux:
+if platform_is_macosx or platform_is_linux or platform_is_ios:
     install_root = "/usr/local"
     install_lib_dir     = install_root + "/lib";
     install_headers_dir = install_root + "/include/" + project_name    
@@ -71,6 +74,11 @@ if platform_is_macosx:
     env.Append(CPPPATH='#include/apple/')
     env.Append(LINKFLAGS='-framework AudioToolbox -framework CoreFoundation')
 
+if platform_is_ios:
+	env['CXX'] = 'c++'
+	env.Append(CXXFLAGS='-isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.0.sdk -arch armv6 -arch armv7')
+	env.Append(LINKFLAGS='-isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.0.sdk -arch armv6 -arch armv7 -framework AudioToolbox -framework CoreFoundation')
+
 if platform_is_windows:
     env.Append(LIBPATH='C:\\Program Files\\Microsoft SDKs\\Windows\\v7.1\\Lib')
     env.Append(CPPPATH='C:\\Program Files\\Microsoft SDKs\\Windows\\v7.1\\Include')
@@ -104,7 +112,7 @@ if not env.GetOption('clean') and not SCons.Util.containsAny(os.sys.argv, ['-h',
     env = conf.Finish()
 
 sources = Split(""" audiodecoderbase.cpp """)
-if platform_is_macosx:
+if platform_is_macosx or platform_is_ios:
     sources += Split(""" audiodecodercoreaudio.cpp """)
 elif platform_is_windows:
     sources += Split(""" audiodecodermediafoundation.cpp """)
