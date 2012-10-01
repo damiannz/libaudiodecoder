@@ -73,11 +73,14 @@ if platform_is_macosx:
     env.Append(CPPPATH='/System/Library/Frameworks/AudioToolbox.framework/Headers/')
     env.Append(CPPPATH='#include/apple/')
     env.Append(LINKFLAGS='-framework AudioToolbox -framework CoreFoundation')
+   	# universal
+    env.Append(LINKFLAGS='-arch i386 -arch x86_64')
+    env.Append(CXXFLAGS='-arch i386 -arch x86_64')
 
 if platform_is_ios:
 	env['CXX'] = 'c++'
-	env.Append(CXXFLAGS='-isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.0.sdk -arch armv6 -arch armv7')
-	env.Append(LINKFLAGS='-isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS6.0.sdk -arch armv6 -arch armv7 -framework AudioToolbox -framework CoreFoundation')
+	env.Append(CXXFLAGS='-isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS5.1.sdk -arch armv6 -arch armv7')
+	env.Append(LINKFLAGS='-isysroot /Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS5.1.sdk -arch armv6 -arch armv7 -framework AudioToolbox -framework CoreFoundation')
 
 if platform_is_windows:
     env.Append(LIBPATH='C:\\Program Files\\Microsoft SDKs\\Windows\\v7.1\\Lib')

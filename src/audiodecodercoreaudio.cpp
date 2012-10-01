@@ -39,9 +39,76 @@
 #include <string>
 #include <iostream>
 #include "audiodecodercoreaudio.h"
+#include <TargetConditionals.h>
+
+#if TARGET_OS_IPHONE
+typedef short READ_SAMPLE;
+#else
+typedef float READ_SAMPLE;
+#endif
 
 
-AudioDecoderCoreAudio::AudioDecoderCoreAudio(const std::string filename) 
+std::string getErrorString( OSStatus errorCode ) {
+	std::string errorString = "no error";
+	if(noErr != errorCode)
+	{
+		
+		switch(errorCode)
+		{
+	#ifdef __IPHONE_3_1
+	#if __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_3_1
+			case kExtAudioFileError_CodecUnavailableInputConsumed:
+				errorString = "Write function interrupted - last buffer written";
+				break;
+			case kExtAudioFileError_CodecUnavailableInputNotConsumed:
+				errorString = "Write function interrupted - last buffer not written";
+				break;
+	#endif /* __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_3_1 */
+	#endif /* __IPHONE_3_1 */
+			case kExtAudioFileError_InvalidProperty:
+				errorString = "Invalid property";
+				break;
+			case kExtAudioFileError_InvalidPropertySize:
+				errorString = "Invalid property size";
+				break;
+			case kExtAudioFileError_NonPCMClientFormat:
+				errorString = "Non-PCM client format";
+				break;
+			case kExtAudioFileError_InvalidChannelMap:
+				errorString = "Wrong number of channels for format";
+				break;
+			case kExtAudioFileError_InvalidOperationOrder:
+				errorString = "Invalid operation order";
+				break;
+			case kExtAudioFileError_InvalidDataFormat:
+				errorString = "Invalid data format";
+				break;
+			case kExtAudioFileError_MaxPacketSizeUnknown:
+				errorString = "Max packet size unknown";
+				break;
+			case kExtAudioFileError_InvalidSeek:
+				errorString = "Seek offset out of bounds";
+				break;
+			case kExtAudioFileError_AsyncWriteTooLarge:
+				errorString = "Async write too large";
+				break;
+			case kExtAudioFileError_AsyncWriteBufferOverflow:
+				errorString = "Async write could not be completed in time";
+				break;
+			case kAudioConverterErr_InvalidOutputSize:
+				errorString = "Invalid output size";
+				break;
+			default:
+				errorString = "Unknown ext audio error";
+		}
+		
+	}
+	
+	return errorString;
+}
+
+
+AudioDecoderCoreAudio::AudioDecoderCoreAudio(const std::string filename)
 : AudioDecoderBase(filename)
 , m_headerFrames(0)
 {
@@ -66,7 +133,7 @@ int AudioDecoderCoreAudio::open() {
                 m_filename.data()), m_filename.size());
                 */
     CFStringRef urlStr = CFStringCreateWithCString(kCFAllocatorDefault, 
-                                                   m_filename.c_str(), 
+                                                   m_filename.c_str(),
                                                    CFStringGetSystemEncoding());
 
     CFURLRef urlRef = CFURLCreateWithFileSystemPath(NULL, urlStr, kCFURLPOSIXPathStyle, false);
@@ -101,14 +168,21 @@ int AudioDecoderCoreAudio::open() {
     
 	// create the output format
 	CAStreamBasicDescription outputFormat;
+/*	FillOutASBDForLPCM( outputFormat,
+					   inputFormat.mSampleRate,
+					   inputFormat.mChannelsPerFrame,
+					   16, // bits per channel
+					   16, // bits per channel
+					   false, // isFloat
+					   false // isBigEndian
+					   );*/
     bzero(&outputFormat, sizeof(AudioStreamBasicDescription));
 	outputFormat.mFormatID = kAudioFormatLinearPCM;
 	outputFormat.mSampleRate = inputFormat.mSampleRate;
 	outputFormat.mChannelsPerFrame = 2;
-    outputFormat.mFormatFlags = kAudioFormatFlagsCanonical;  
-    //kAudioFormatFlagsCanonical means Native endian, float, packed on Mac OS X, 
+    outputFormat.mFormatFlags = kAudioFormatFlagsCanonical;
+    //kAudioFormatFlagsCanonical means Native endian, float, packed on Mac OS X,
     //but signed int for iOS instead.
-
     //Note iPhone/iOS only supports signed integers supposedly:
     //outputFormat.mFormatFlags = kAudioFormatFlagIsSignedInteger;
 	
@@ -136,8 +210,8 @@ int AudioDecoderCoreAudio::open() {
     // get and set the client format - it should be lpcm
     CAStreamBasicDescription clientFormat = outputFormat; //We're always telling the OS to do the conversion to floats for us now
 	clientFormat.mChannelsPerFrame = 2;
-	clientFormat.mBytesPerFrame = sizeof(SAMPLE)*clientFormat.mChannelsPerFrame;
-	clientFormat.mBitsPerChannel = sizeof(SAMPLE)*8; //16 for signed int, 32 for float;
+	clientFormat.mBytesPerFrame = sizeof(READ_SAMPLE)*clientFormat.mChannelsPerFrame;
+	clientFormat.mBitsPerChannel = sizeof(READ_SAMPLE)*8; //16 for signed int, 32 for float;
 	clientFormat.mFramesPerPacket = 1;
 	clientFormat.mBytesPerPacket = clientFormat.mBytesPerFrame*clientFormat.mFramesPerPacket;
 	clientFormat.mReserved = 0;
@@ -217,24 +291,91 @@ int AudioDecoderCoreAudio::seek(int sampleIdx) {
 	//err = ExtAudioFileSeek(m_audioFile, sampleIdx / 2);		
 	if (err != noErr)
 	{
-        std::cerr << "AudioDecoderCoreAudio: Error seeking to sample " << sampleIdx << std::endl;
+        std::cerr << "AudioDecoderCoreAudio: Error " << err << " seeking to sample " << sampleIdx << std::endl;
 	}
 
     m_iPositionInSamples = sampleIdx;
 
     return AUDIODECODER_OK;
 }
-
-int AudioDecoderCoreAudio::read(int size, const SAMPLE *destination) {
-    OSStatus err;
-    SAMPLE *destBuffer(const_cast<SAMPLE*>(destination));
+/*
+int AudioDecoderCoreAudio::readShort(int size, const short *destination) {
+	OSStatus err;
+    short *destBuffer(const_cast<short*>(destination));
     unsigned int samplesWritten = 0;
     unsigned int i = 0;
     UInt32 numFrames = 0;
-    unsigned int totalFramesToRead = size/2;
+    unsigned int totalFramesToRead = size/m_clientFormat.NumberChannels();
     unsigned int numFramesRead = 0;
     unsigned int numFramesToRead = totalFramesToRead;
 
+	
+    while (numFramesRead < totalFramesToRead) {
+    	numFramesToRead = totalFramesToRead - numFramesRead;
+    	
+		AudioBufferList fillBufList;
+		fillBufList.mNumberBuffers = 1; //Decode a single track
+        //See CoreAudioTypes.h for definitins of these variables:
+		fillBufList.mBuffers[0].mNumberChannels = m_clientFormat.NumberChannels();
+		fillBufList.mBuffers[0].mDataByteSize = numFramesToRead*m_clientFormat.NumberChannels() * sizeof(short int);
+		fillBufList.mBuffers[0].mData = (void*)(&destBuffer[numFramesRead*2]);
+		std::cout << "frames to read: " << numFramesToRead << "/" << totalFramesToRead << " size "<< fillBufList.mBuffers[0].mDataByteSize << " (" << numFramesToRead*m_clientFormat.NumberChannels()<<" samples)" << std::endl;
+		
+        // client format is always linear PCM - so here we determine how many frames of lpcm
+        // we can read/write given our buffer size
+		numFrames = numFramesToRead; //This silly variable acts as both a parameter and return value.
+		err = ExtAudioFileRead (m_audioFile, &numFrames, &fillBufList);\
+		std::cout << "actually read " <<numFrames <<std::endl;
+		//The actual number of frames read also comes back in numFrames.
+		//(It's both a parameter to a function and a return value. wat apple?)
+		//XThrowIfError (err, "ExtAudioFileRead");
+        if (err != noErr)
+        {
+            std::cerr << "Error '" << getErrorString(err) << "' reading samples from file" << std::endl;
+            return 0;
+        }
+		
+		if (!numFrames) {
+			// this is our termination condition
+			break;
+		}
+		numFramesRead += numFrames;
+    }
+    
+    m_iPositionInSamples += numFramesRead*m_iChannels;
+	
+	std::cout << "read " << numFramesRead << " frames, " << m_iChannels << " channels";
+	
+    return numFramesRead*m_iChannels;
+}*/
+
+
+int AudioDecoderCoreAudio::read(int size, const SAMPLE *destination) {
+    OSStatus err;
+
+	READ_SAMPLE *destBuffer;
+	
+#if TARGET_OS_IPHONE
+	// 16-bit on iphone
+	destBuffer = (READ_SAMPLE*)malloc(sizeof(READ_SAMPLE)*size );
+#else
+	destBuffer = const_cast<READ_SAMPLE*>(destination);
+#endif
+		
+    unsigned int samplesWritten = 0;
+    unsigned int i = 0;
+    UInt32 numFrames = 0;
+    unsigned int totalFramesToRead = size/m_iChannels;
+    unsigned int numFramesRead = 0;
+    unsigned int numFramesToRead = totalFramesToRead;
+
+/*	Boolean writeable;
+	UInt32 byteSize;
+	unsigned char data[128];
+	ExtAudioFileGetPropertyInfo( m_audioFile, kExtAudioFileProperty_ClientDataFormat, &byteSize, &writeable );
+	assert(byteSize<128);
+	ExtAudioFileGetProperty( m_audioFile, kExtAudioFileProperty_ClientDataFormat, byteSize, (void*)data );*/
+	
     while (numFramesRead < totalFramesToRead) { 
     	numFramesToRead = totalFramesToRead - numFramesRead;
     	
@@ -242,7 +383,7 @@ int AudioDecoderCoreAudio::read(int size, const SAMPLE *destination) {
 		fillBufList.mNumberBuffers = 1; //Decode a single track
         //See CoreAudioTypes.h for definitins of these variables:
 		fillBufList.mBuffers[0].mNumberChannels = m_clientFormat.NumberChannels();
-		fillBufList.mBuffers[0].mDataByteSize = numFramesToRead*2 * sizeof(SAMPLE);
+		fillBufList.mBuffers[0].mDataByteSize = numFramesToRead*m_iChannels * sizeof(READ_SAMPLE);
 		fillBufList.mBuffers[0].mData = (void*)(&destBuffer[numFramesRead*2]);
 			
         // client format is always linear PCM - so here we determine how many frames of lpcm
@@ -252,12 +393,12 @@ int AudioDecoderCoreAudio::read(int size, const SAMPLE *destination) {
 		//The actual number of frames read also comes back in numFrames.
 		//(It's both a parameter to a function and a return value. wat apple?)
 		//XThrowIfError (err, "ExtAudioFileRead");	
-        /*
         if (err != noErr)
         {
-            std::cerr << "Error reading samples from file" << std::endl;
+            std::cerr << "Error '" << getErrorString(err) << "' reading samples from file" << std::endl;
+			
             return 0;
-        }*/
+        }
 
 		if (!numFrames) {
 				// this is our termination condition
@@ -267,6 +408,17 @@ int AudioDecoderCoreAudio::read(int size, const SAMPLE *destination) {
     }
     
     m_iPositionInSamples += numFramesRead*m_iChannels;
+	
+
+#if TARGET_OS_IPHONE
+	// convert to float 0..1
+	for ( int i=0; i<size; i++ ){
+		SAMPLE* dest = const_cast<SAMPLE*>(destination);
+		dest[i] = destBuffer[i]/32768.0f;
+	}
+#endif
+
+	
 
     return numFramesRead*m_iChannels;
 }
@@ -278,6 +430,12 @@ std::vector<std::string> AudioDecoderCoreAudio::supportedFileExtensions() {
     list.push_back(std::string("m4a"));
     list.push_back(std::string("mp3"));
     list.push_back(std::string("mp2"));
+	list.push_back(std::string("aiff"));
+	list.push_back(std::string("aif"));
+    list.push_back(std::string("caf"));
+    list.push_back(std::string("sd2"));
+    list.push_back(std::string("ac3"));
+    list.push_back(std::string("3gp"));
     //Can add mp3, mp2, ac3, and others here if you want.
     //See:
     //  http://developer.apple.com/library/mac/documentation/MusicAudio/Reference/AudioFileConvertRef/Reference/reference.html#//apple_ref/doc/c_ref/AudioFileTypeID
