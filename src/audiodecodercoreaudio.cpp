@@ -121,7 +121,7 @@ AudioDecoderCoreAudio::~AudioDecoderCoreAudio() {
 }
 
 int AudioDecoderCoreAudio::open() {
-    std::cerr << "AudioDecoderCoreAudio::open()" << std::endl;
+//    std::cerr << "AudioDecoderCoreAudio::open()" << std::endl;
 
     //Open the audio file.
     OSStatus err;
